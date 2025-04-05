@@ -1,50 +1,57 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace Raketa\BackendTestTask\Controller;
 
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
-use Raketa\BackendTestTask\Domain\CartItem;
-use Raketa\BackendTestTask\Repository\CartManager;
-use Raketa\BackendTestTask\Repository\ProductRepository;
+use Raketa\BackendTestTask\Service\AddItemProduct;
 use Raketa\BackendTestTask\View\CartView;
-use Ramsey\Uuid\Uuid;
 
-readonly class AddToCartController
+final class AddToCartController
 {
     public function __construct(
-        private ProductRepository $productRepository,
-        private CartView $cartView,
-        private CartManager $cartManager,
-    ) {
+        private AddItemProduct $cartService,
+        private CartView       $cartView
+    )
+    {
     }
 
     public function get(RequestInterface $request): ResponseInterface
     {
-        $rawRequest = json_decode($request->getBody()->getContents(), true);
-        $product = $this->productRepository->getByUuid($rawRequest['productUuid']);
-
-        $cart = $this->cartManager->getCart();
-        $cart->addItem(new CartItem(
-            Uuid::uuid4()->toString(),
-            $product->getUuid(),
-            $product->getPrice(),
-            $rawRequest['quantity'],
-        ));
-
         $response = new JsonResponse();
-        $response->getBody()->write(
-            json_encode(
-                [
-                    'status' => 'success',
-                    'cart' => $this->cartView->toArray($cart)
-                ],
-                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
-            )
-        );
 
-        return $response
-            ->withHeader('Content-Type', 'application/json; charset=utf-8')
-            ->withStatus(200);
+        try {
+            $rawRequest = json_decode($request->getBody()->getContents(), true);
+
+            if (!isset($rawRequest['productUuid'], $rawRequest['quantity'])) {
+                throw new \InvalidArgumentException('Missing productUuid or quantity');
+            }
+
+            $cart = $this->cartService->addProductToCart(
+                $rawRequest['productUuid'],
+                (int)$rawRequest['quantity']
+            );
+
+            $response->getBody()->write(json_encode([
+                'status' => 'success',
+                'cart'   => $this->cartView->toArray($cart)
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+            return $response
+                ->withHeader('Content-Type', 'application/json; charset=utf-8')
+                ->withStatus(200);
+
+        } catch (\Throwable $e) {
+            $response->getBody()->write(json_encode([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+            return $response
+                ->withHeader('Content-Type', 'application/json; charset=utf-8')
+                ->withStatus(400);
+        }
     }
 }

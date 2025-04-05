@@ -6,50 +6,59 @@ namespace Raketa\BackendTestTask\Repository;
 
 use Doctrine\DBAL\Connection;
 use Raketa\BackendTestTask\Repository\Entity\Product;
+use Raketa\BackendTestTask\Repository\Exception\DbalException;
 
-class ProductRepository
+final class ProductRepository
 {
-    private Connection $connection;
-
-    public function __construct(Connection $connection)
+    public function __construct(
+        private Connection $connection
+    )
     {
-        $this->connection = $connection;
     }
 
     public function getByUuid(string $uuid): Product
     {
-        $row = $this->connection->fetchOne(
-            "SELECT * FROM products WHERE uuid = " . $uuid,
-        );
+        try {
+            $row = $this->connection->fetchAssociative(
+                'SELECT * FROM products WHERE uuid = :uuid',
+                ['uuid' => $uuid]
+            );
 
-        if (empty($row)) {
-            throw new Exception('Product not found');
+            if (!$row) {
+                throw new \RuntimeException("Product not found: {$uuid}");
+            }
+
+            return $this->make($row);
+        } catch (DbalException $e) {
+            throw new \RuntimeException('Database error while fetching product', 0, $e);
         }
-
-        return $this->make($row);
     }
 
     public function getByCategory(string $category): array
     {
-        return array_map(
-            static fn (array $row): Product => $this->make($row),
-            $this->connection->fetchAllAssociative(
-                "SELECT id FROM products WHERE is_active = 1 AND category = " . $category,
-            )
-        );
+        try {
+            $rows = $this->connection->fetchAllAssociative(
+                'SELECT * FROM products WHERE is_active = 1 AND category = :category',
+                ['category' => $category]
+            );
+
+            return array_map(fn(array $row) => $this->make($row), $rows);
+        } catch (DbalException $e) {
+            throw new \RuntimeException('Database error while fetching products by category', 0, $e);
+        }
     }
 
-    public function make(array $row): Product
+    private function make(array $row): Product
     {
         return new Product(
-            $row['id'],
+            (int)$row['id'],
             $row['uuid'],
-            $row['is_active'],
+            (bool)$row['is_active'],
             $row['category'],
             $row['name'],
             $row['description'],
             $row['thumbnail'],
-            $row['price'],
+            (float)$row['price'],
         );
     }
 }

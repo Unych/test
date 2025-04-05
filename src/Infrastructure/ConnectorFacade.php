@@ -4,45 +4,33 @@ declare(strict_types = 1);
 
 namespace Raketa\BackendTestTask\Infrastructure;
 
+use Raketa\BackendTestTask\Infrastructure\Exception\ConnectorException;
 use Redis;
 use RedisException;
 
-class ConnectorFacade
+final class ConnectorFacade
 {
-    public string $host;
-    public int $port = 6379;
-    public ?string $password = null;
-    public ?int $dbindex = null;
-
-    public $connector;
-
-    public function __construct($host, $port, $password, $dbindex)
+    public static function fromConfig(array $config): Connector
     {
-        $this->host = $host;
-        $this->port = $port;
-        $this->password = $password;
-        $this->dbindex = $dbindex;
-    }
-
-    protected function build(): void
-    {
-        $redis = new Redis();
 
         try {
-            $isConnected = $redis->isConnected();
-            if (! $isConnected && $redis->ping('Pong')) {
-                $isConnected = $redis->connect(
-                    $this->host,
-                    $this->port,
-                );
-            }
-        } catch (RedisException) {
-        }
+            $config = require __DIR__ . '/../Infrastructure/config.php';
 
-        if ($isConnected) {
-            $redis->auth($this->password);
-            $redis->select($this->dbindex);
-            $this->connector = new Connector($redis);
+            $redis = new Redis();
+            $redis->connect($config['host'], $config['port'], 2.0);
+
+            if (!empty($config['password'])) {
+                $redis->auth($config['password']);
+            }
+
+            if ($redis->ping() !== '+PONG') {
+                throw new RedisException('Redis ping failed');
+            }
+
+            return new Connector($redis);
+
+        } catch (RedisException $e) {
+            throw new ConnectorException('Redis connection failed', $e->getCode(), $e);
         }
     }
 }

@@ -9,41 +9,51 @@ use Psr\Http\Message\ResponseInterface;
 use Raketa\BackendTestTask\Repository\CartManager;
 use Raketa\BackendTestTask\View\CartView;
 
-readonly class GetCartController
+final class GetCartController
 {
     public function __construct(
-        public CartView $cartView,
-        public CartManager $cartManager
-    ) {
+        private CartView    $cartView,
+        private CartManager $cartManager
+    )
+    {
     }
 
     public function get(RequestInterface $request): ResponseInterface
     {
         $response = new JsonResponse();
-        $cart = $this->cartManager->getCart();
 
-        if (! $cart) {
-            $response->getBody()->write(
-                json_encode(
-                    ['message' => 'Cart not found'],
-                    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
-                )
-            );
+        try {
+            $cart = $this->cartManager->getCart();
+
+            if (!$cart) {
+                $response->getBody()->write(json_encode([
+                    'status'  => 'error',
+                    'message' => 'Cart not found',
+                ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+                return $response
+                    ->withHeader('Content-Type', 'application/json; charset=utf-8')
+                    ->withStatus(404);
+            }
+
+            $response->getBody()->write(json_encode([
+                'status' => 'success',
+                'cart'   => $this->cartView->toArray($cart),
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
             return $response
                 ->withHeader('Content-Type', 'application/json; charset=utf-8')
-                ->withStatus(404);
-        } else {
-            $response->getBody()->write(
-                json_encode(
-                    $this->cartView->toArray($cart),
-                    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
-                )
-            );
-        }
+                ->withStatus(200);
 
-        return $response
-            ->withHeader('Content-Type', 'application/json; charset=utf-8')
-            ->withStatus(404);
+        } catch (\Throwable $e) {
+            $response->getBody()->write(json_encode([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+            return $response
+                ->withHeader('Content-Type', 'application/json; charset=utf-8')
+                ->withStatus(500);
+        }
     }
 }
