@@ -4,7 +4,7 @@ declare(strict_types =1 );
 
 namespace Raketa\BackendTestTask\Domain;
 
-final class CartItem
+readonly class CartItem
 {
     public function __construct(
         public string $uuid,

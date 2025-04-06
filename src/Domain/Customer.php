@@ -4,7 +4,7 @@ declare(strict_types = 1);
 
 namespace Raketa\BackendTestTask\Domain;
 
-final class Customer
+readonly class Customer
 {
     public function __construct(
         private int    $id,
